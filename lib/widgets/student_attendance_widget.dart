@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:attendance_app/utils/constants.dart';
 import 'package:attendance_app/utils/models.dart';
 import 'package:attendance_app/utils/permissions.dart';
 import 'package:ble_peripheral/ble_peripheral.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class StudentAttedenceButtom extends StatelessWidget {
@@ -54,6 +54,10 @@ class StudentAttendanceBottomSheet extends StatefulWidget {
 
 class _StudentAttendanceBottomSheetState
     extends State<StudentAttendanceBottomSheet> {
+  List<String> _events = [];
+  final _eventStreamController = StreamController<String>();
+  final ScrollController _eventsScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +66,9 @@ class _StudentAttendanceBottomSheetState
 
   @override
   void dispose() {
+    _eventStreamController.close();
     BlePeripheral.stopAdvertising();
+    _clearLog();
     super.dispose();
   }
 
@@ -107,6 +113,35 @@ class _StudentAttendanceBottomSheetState
                       ),
                     ),
             ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                  ),
+                  width: double.infinity,
+                  child: ListView.builder(
+                    itemBuilder: (context, index) => ListTile(
+                      leading: Text(
+                        "${index + 1}.",
+                        style: const TextStyle(
+                          fontSize: 15,
+                        ),
+                      ),
+                      title: Text(
+                        _events[index],
+                        style: const TextStyle(
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    itemCount: _events.length,
+                    controller: _eventsScrollController,
+                  ),
+                ),
+              ),
+            )
           ],
         ),
       ),
@@ -132,15 +167,6 @@ class _StudentAttendanceBottomSheetState
   void _initializeBluetooth() async {
     await BlePeripheral.initialize();
 
-    var notificationControlDescriptor = BleDescriptor(
-      uuid: SERVICE_ID,
-      value: Uint8List.fromList([0, 1]),
-      permissions: [
-        AttributePermissions.readable.index,
-        AttributePermissions.writeable.index
-      ],
-    );
-
     await BlePeripheral.addService(
       BleService(
         uuid: SERVICE_ID,
@@ -157,22 +183,42 @@ class _StudentAttendanceBottomSheetState
               AttributePermissions.writeable.index,
             ],
             value: null,
-            descriptors: [notificationControlDescriptor],
           )
         ],
       ),
     );
 
+    BlePeripheral.setBleCentralAvailabilityCallback(
+        (String deviceId, bool isAvailable) {
+      _addEvent("OnDeviceAvailabilityChange: $deviceId : $isAvailable");
+    });
+
+    // Android only, Called when central connected
+    BlePeripheral.setConnectionStateChangeCallback(
+        (String deviceId, bool isAvailable) {
+      _addEvent("OnConnectionStateChange: $deviceId : $isAvailable");
+    });
+
+    // Apple only, Called when central subscribes to a characteristic
+    BlePeripheral.setCharacteristicSubscriptionChangeCallback(
+        (String deviceId, String characteristicId, bool isSubscribed) {
+      _addEvent(
+          "OnCharacteristicSubscriptionChange: $deviceId $characteristicId : $isSubscribed");
+    });
+
+    // Called when advertisement started/failed
     BlePeripheral.setAdvertingStartedCallback((String? error) {
       if (error != null) {
-        print("AdvertisingFailed: $error");
+        _addEvent("AdvertisingFailed: $error");
       } else {
-        print("AdvertingStarted");
+        _addEvent("AdvertingStarted");
       }
     });
+
+    // Called when Central device tries to read a characteristics
     BlePeripheral.setReadRequestCallback(
         (deviceId, characteristicId, offset, value) {
-      print("ReadRequest: $deviceId $characteristicId : $offset : $value");
+      _addEvent("ReadRequest: $deviceId $characteristicId : $offset : $value");
 
       if (characteristicId == SERVICE_ID) {
         return ReadRequestResult(value: utf8.encode("id:${USER?.id}"));
@@ -180,11 +226,12 @@ class _StudentAttendanceBottomSheetState
       return ReadRequestResult(value: utf8.encode(""));
     });
 
+    // When central tries to write to a characteristic
     BlePeripheral.setWriteRequestCallback(
         (deviceId, characteristicId, offset, value) {
-      print("WriteRequest: $deviceId $characteristicId : $offset : $value");
+      _addEvent("WriteRequest: $deviceId $characteristicId : $offset : $value");
       if ((characteristicId == SERVICE_ID) && value != null) {
-        print(String.fromCharCodes(value));
+        _addEvent(String.fromCharCodes(value));
         if (String.fromCharCodes(value) == "OK") {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -195,6 +242,32 @@ class _StudentAttendanceBottomSheetState
         }
       }
       return null;
+    });
+
+    // Called when service added successfully
+    BlePeripheral.setServiceAddedCallback((String serviceId, String? error) {
+      if (error != null) {
+        _addEvent("ServiceAddFailed: $error");
+      } else {
+        _addEvent("ServiceAdded: $serviceId");
+      }
+    });
+  }
+
+  // add the event
+  void _addEvent(String event) {
+    setState(() {
+      _events.add(event);
+    });
+    print("-----> BLE Event: $event");
+    _eventsScrollController
+        .jumpTo(_eventsScrollController.position.maxScrollExtent);
+  }
+
+  // clear the log
+  void _clearLog() {
+    setState(() {
+      _events.clear();
     });
   }
 }

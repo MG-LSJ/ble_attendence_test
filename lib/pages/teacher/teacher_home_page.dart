@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:attendance_app/utils/constants.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +44,9 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
             children: [
               TextButton(
                 onPressed: scanButtonClick,
-                child: const Text("Start Scanning"),
+                child: _isScanning
+                    ? const Text("Stop Scanning")
+                    : const Text("Start Scanning"),
               ),
               const Text(
                 "Detected IDs: ",

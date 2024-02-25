@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:attendance_app/utils/constants.dart';
@@ -15,58 +16,18 @@ class TeacherHomePage extends StatefulWidget {
 class _TeacherHomePageState extends State<TeacherHomePage> {
   final ScrollController _idScrollController = ScrollController();
   List<String> _detectedIds = [];
-  List<BluetoothDevice> _systemDevices = [];
+  List<BluetoothDevice> discoveredDevices = [];
   List<ScanResult> _scanResults = [];
   bool _isScanning = false;
-  late StreamSubscription<List<ScanResult>> _scanResultsSubscription;
-  late StreamSubscription<bool> _isScanningSubscription;
-  late StreamSubscription<BluetoothAdapterState> _adapterStateSubscription;
 
   @override
   void initState() {
     super.initState();
-
-    _scanResultsSubscription = FlutterBluePlus.onScanResults.listen(
-      (results) {
-        if (results.isNotEmpty) {
-          _scanResults = results;
-          setState(() {});
-        }
-      },
-      onError: (e) => print(e),
-    );
-
-    _isScanningSubscription = FlutterBluePlus.isScanning.listen(
-      (isScanning) {
-        _isScanning = isScanning;
-        setState(() {});
-      },
-      onError: (e) => print(e),
-    );
   }
 
   @override
   void dispose() {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    _adapterStateSubscription.cancel();
-
     super.dispose();
-  }
-
-  Future _startScan() async {
-    try {
-      _systemDevices = await FlutterBluePlus.systemDevices;
-      await FlutterBluePlus.startScan(
-        continuousUpdates: true,
-        oneByOne: true,
-        withServices: [Guid(SERVICE_ID)],
-        removeIfGone: const Duration(seconds: 1),
-        androidScanMode: AndroidScanMode.lowLatency,
-      );
-    } catch (e) {
-      print(e);
-    }
   }
 
   @override
@@ -83,7 +44,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextButton(
-                onPressed: _startScanning,
+                onPressed: scanButtonClick,
                 child: const Text("Start Scanning"),
               ),
               const Text(
@@ -116,34 +77,65 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     );
   }
 
-  void _startScanning() async {
-    // first, check if bluetooth is supported by your hardware
-    // Note: The platform is initialized on the first call to any FlutterBluePlus method.
-    if (await FlutterBluePlus.isSupported == false) {
-      print("Bluetooth not supported by this device");
-      return;
+  void scanButtonClick() {
+    if (_isScanning) {
+      stopScanning();
+    } else {
+      startScanning();
     }
+  }
 
-    // handle bluetooth on & off
-    // note: for iOS the initial state is typically BluetoothAdapterState.unknown
-    // note: if you have permissions issues you will get stuck at BluetoothAdapterState.unauthorized
-    var subscription =
-        FlutterBluePlus.adapterState.listen((BluetoothAdapterState state) {
-      print(state);
-      if (state == BluetoothAdapterState.on) {
-        // usually start scanning, connecting, etc
-      } else {
-        // show an error to the user, etc
+  void startScanning() async {
+    FlutterBluePlus.onScanResults.listen(
+      (List<ScanResult> results) async {
+        if (results.isNotEmpty) {
+          for (ScanResult result in results) {
+            print(
+                'Device found: ${result.device.remoteId}: ${result.advertisementData.advName} found');
+            if (!discoveredDevices.contains(result.device)) {
+              discoveredDevices.add(result.device);
+              await connectToDevice(result.device);
+            }
+          }
+        }
+      },
+      onError: (e) => print(e),
+    );
+
+    await FlutterBluePlus.startScan(
+      withServices: [Guid(SERVICE_ID)],
+    );
+  }
+
+  Future<void> connectToDevice(BluetoothDevice device) async {
+    await device.connect();
+
+    // Discover services
+    List<BluetoothService> services = await device.discoverServices();
+
+    for (BluetoothService service in services) {
+      if (service.uuid.toString() == SERVICE_ID) {
+        // Discover characteristics
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          if (characteristic.uuid.toString() == SERVICE_ID) {
+            // Read the characteristic value
+            List<int> value = await characteristic.read();
+            print('Value: ${utf8.decode(value)}');
+            _detectedIds.add(utf8.decode(value));
+            setState(() {});
+            _idScrollController.jumpTo(
+              _idScrollController.position.maxScrollExtent,
+            );
+          }
+        }
       }
-    });
-
-    // turn on bluetooth ourself if we can
-    // for iOS, the user controls bluetooth enable/disable
-    if (Platform.isAndroid) {
-      await FlutterBluePlus.turnOn();
     }
+    // Once connected, you can perform operations on the device.
+    await device.disconnect();
+  }
 
-    // cancel to prevent duplicate listeners
-    subscription.cancel();
+  void stopScanning() async {
+    await FlutterBluePlus.stopScan();
   }
 }

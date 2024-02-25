@@ -18,6 +18,9 @@ Future<bool> checkBluetoothPermissions() async {
     // print('location locationWhenInUse: ${locationWhenInUse.isGranted}');
     return bleScan.isGranted && bleConnect.isGranted && bleAdvertise.isGranted;
   }
+  if (Platform.isIOS) {
+    return true;
+  }
   return false;
 }
 

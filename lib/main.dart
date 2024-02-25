@@ -6,13 +6,13 @@ void main() {
   runApp(const MyApp());
 }
 
-final _defaultLightColorScheme = ColorScheme.fromSwatch(
-  primarySwatch: Colors.grey,
+final _defaultLightColorScheme = ColorScheme.fromSeed(
+  seedColor: Colors.blue,
   brightness: Brightness.light,
 );
 
-final _defaultDarkColorScheme = ColorScheme.fromSwatch(
-  primarySwatch: Colors.grey,
+final _defaultDarkColorScheme = ColorScheme.fromSeed(
+  seedColor: Colors.blue,
   brightness: Brightness.dark,
 );
 

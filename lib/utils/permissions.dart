@@ -19,6 +19,7 @@ Future<bool> checkBluetoothPermissions() async {
     return bleScan.isGranted && bleConnect.isGranted && bleAdvertise.isGranted;
   }
   if (Platform.isIOS) {
+    var permission = await Permission.bluetooth.request();
     return true;
   }
   return false;
@@ -27,8 +28,7 @@ Future<bool> checkBluetoothPermissions() async {
 Future<bool> isBluetoothOn(BuildContext context) async {
   bool RETURN_VALUE = false;
   if (Platform.isIOS) {
-    var status = await Permission.bluetooth.request();
-    RETURN_VALUE = status.isGranted;
+    return true;
   }
   if (Platform.isAndroid) {
     var status = await Permission.bluetooth.serviceStatus.isEnabled;

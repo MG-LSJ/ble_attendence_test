@@ -55,7 +55,6 @@ class StudentAttendanceBottomSheet extends StatefulWidget {
 class _StudentAttendanceBottomSheetState
     extends State<StudentAttendanceBottomSheet> {
   List<String> _events = [];
-  final _eventStreamController = StreamController<String>();
   final ScrollController _eventsScrollController = ScrollController();
 
   @override
@@ -66,7 +65,6 @@ class _StudentAttendanceBottomSheetState
 
   @override
   void dispose() {
-    _eventStreamController.close();
     BlePeripheral.stopAdvertising();
     _clearLog();
     super.dispose();
